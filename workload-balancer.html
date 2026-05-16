@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin Workload Balancer</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: #0f0f0f;
+  color: white;
+  padding: 40px;
+}
+
+h1 {
+  font-size: 32px;
+  margin-bottom: 20px;
+}
+
+.glass {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 25px;
+  margin-bottom: 25px;
+  backdrop-filter: blur(12px);
+}
+
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.tech-card {
+  background: rgba(255,255,255,0.1);
+  border-radius: 16px;
+  padding: 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+.load-bar {
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.2);
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.load-fill {
+  height: 100%;
+  border-radius: 6px;
+}
+
+.job-list {
+  margin-top: 15px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 10px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.job-item {
+  padding: 8px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: grab;
+}
+
+.job-item:active {
+  cursor: grabbing;
+}
+
+.drop-zone {
+  border: 2px dashed rgba(255,255,255,0.3);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+  margin-top: 10px;
+  opacity: 0.7;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Admin Workload Balancer</h1>
+
+<div class="glass">
+  <h2>Technician Workload Overview</h2>
+  <div class="tech-grid" id="techGrid"></div>
+</div>
+
+<script>
+const supabaseClient = supabase.createClient(
+  "YOUR_SUPABASE_URL",
+  "YOUR_SUPABASE_KEY"
+);
+
+let technicians = [];
+let jobs = [];
+let draggedJob = null;
+
+/* LOAD TECHNICIANS */
+async function loadTechnicians() {
+  const { data } = await supabaseClient
+    .from("technicians")
+    .select("*")
+    .eq("active", true);
+
+  technicians = data;
+}
+
+/* LOAD JOBS */
+async function loadJobs() {
+  const { data } = await supabaseClient
+    .from("jobs")
+    .select("*")
+    .in("status", ["assigned", "scheduled"]);
+
+  jobs = data;
+  renderWorkload();
+}
+
+/* RENDER WORKLOAD GRID */
+function renderWorkload() {
+  const grid = document.getElementById("techGrid");
+  grid.innerHTML = "";
+
+  technicians.forEach(tech => {
+    const techJobs = jobs.filter(j => j.assigned_to === tech.id);
+
+    const totalHours = techJobs.reduce((sum, j) => sum + (j.scheduled_duration || 2), 0);
+    const loadPercent = Math.min((totalHours / tech.max_hours) * 100, 100);
+
+    const card = document.createElement("div");
+    card.className = "tech-card";
+
+    const loadColor =
+      loadPercent < 50 ? "#4CAF50" :
+      loadPercent < 80 ? "#F5C15C" :
+      "#ff4d4d";
+
+    card.innerHTML = `
+      <h3>${tech.name}</h3>
+      <p>Jobs: ${techJobs.length}</p>
+      <p>Hours: ${totalHours} / ${tech.max_hours}</p>
+
+      <div class="load-bar">
+        <div class="load-fill" style="width:${loadPercent}%;background:${loadColor};"></div>
+      </div>
+
+      <div class="job-list" id="jobs-${tech.id}">
+        ${techJobs.map(j => `
+          <div class="job-item"
+               draggable="true"
+               ondragstart="dragJob(${j.id})">
+            ${j.title}
+          </div>
+        `).join("")}
+      </div>
+
+      <div class="drop-zone"
+           ondragover="event.preventDefault()"
+           ondrop="dropJob('${tech.id}')">
+        Drop job here to reassign
+      </div>
+    `;
+
+    grid.appendChild(card);
+  });
+}
+
+/* DRAG JOB */
+function dragJob(jobId) {
+  draggedJob = jobId;
+}
+
+/* DROP JOB */
+async function dropJob(newTechId) {
+  if (!draggedJob) return;
+
+  await supabaseClient
+    .from("jobs")
+    .update({
+      assigned_to: newTechId,
+      status: "assigned",
+      admin_notes: "Reassigned via Workload Balancer",
+      approval_time: new Date().toISOString()
+    })
+    .eq("id", draggedJob);
+
+  await supabaseClient.from("job_notifications").insert({
+    job_id: draggedJob,
+    tech_id: newTechId,
+    type: "reassigned",
+    created_at: new Date().toISOString()
+  });
+
+  fetch("/api/notify-reassign", {
+    method: "POST",
+    body: JSON.stringify({
+      jobId: draggedJob,
+      techId: newTechId
+    })
+  });
+
+  draggedJob = null;
+  loadJobs();
+}
+
+/* REALTIME FEED */
+supabaseClient
+  .channel("workload_feed")
+  .on("postgres_changes", { event: "UPDATE", schema: "public", table: "jobs" }, payload => {
+    loadJobs();
+  })
+  .subscribe();
+
+loadTechnicians();
+loadJobs();
+</script>
+
+</body>
+</html>
