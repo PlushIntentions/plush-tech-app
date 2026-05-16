@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+    header { background: #222; color: white; padding: 20px; text-align: center; }
+    nav { display: flex; flex-direction: column; padding: 20px; gap: 12px; }
+    nav a {
+      background: white; padding: 14px; border-radius: 6px;
+      text-decoration: none; color: #222; font-weight: bold;
+      border: 1px solid #ddd;
+    }
+    nav a:hover { background: #eaeaea; }
+    footer { text-align: center; padding: 20px; color: #555; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Admin Dashboard</h1>
+    <p>Manage technicians, jobs, schedules, SLAs, and live locations.</p>
+  </header>
+
+  <nav>
+    <a href="techs.html">Technician Live Locations</a>
+    <a href="jobs.html">Jobs</a>
+    <a href="schedule.html">Schedules</a>
+    <a href="swaps.html">Shift Swaps</a>
+    <a href="sla.html">SLA Dashboard</a>
+  </nav>
+
+  <footer>
+    <p>Admin Portal • Powered by Supabase</p>
+  </footer>
+
+  <!-- Inline JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script>
+    // Replace with your real values
+    const SUPABASE_URL = "YOUR_URL_HERE";
+    const SUPABASE_ANON = "YOUR_ANON_KEY_HERE";
+
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+    console.log("Admin dashboard loaded");
+  </script>
+</body>
+</html>
