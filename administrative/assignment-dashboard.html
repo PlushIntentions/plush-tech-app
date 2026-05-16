@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin Job Assignment Dashboard</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: #0f0f0f;
+  color: white;
+  padding: 40px;
+}
+
+h1 {
+  font-size: 32px;
+  margin-bottom: 20px;
+}
+
+.glass {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 25px;
+  margin-bottom: 25px;
+  backdrop-filter: blur(12px);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+th, td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+}
+
+th {
+  text-align: left;
+  opacity: 0.7;
+}
+
+button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-approve {
+  background: #4CAF50;
+  color: white;
+}
+
+.btn-reject {
+  background: #ff4d4d;
+  color: white;
+}
+
+.btn-view {
+  background: rgba(255,255,255,0.2);
+  color: white;
+}
+
+.modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background: rgba(255,255,255,0.1);
+  padding: 30px;
+  border-radius: 16px;
+  width: 450px;
+  backdrop-filter: blur(15px);
+}
+
+select, textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255,255,255,0.15);
+  color: white;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Admin Job Assignment Dashboard</h1>
+
+<div class="glass">
+  <h2>Pending Job Requests</h2>
+  <table id="requestTable">
+    <thead>
+      <tr>
+        <th>Job ID</th>
+        <th>Title</th>
+        <th>Requested By</th>
+        <th>Requested At</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- ASSIGN MODAL -->
+<div class="modal" id="assignModal">
+  <div class="modal-content">
+    <h2>Assign Job</h2>
+
+    <p id="modalJob"></p>
+    <p id="modalTech"></p>
+
+    <label>Select Technician</label>
+    <select id="assignTech"></select>
+
+    <label>Admin Notes</label>
+    <textarea id="assignNotes" placeholder="Optional notes..."></textarea>
+
+    <button class="btn-approve" onclick="confirmAssignment()">Assign</button>
+    <button class="btn-view" onclick="closeModal()">Cancel</button>
+  </div>
+</div>
+
+<script>
+const supabaseClient = supabase.createClient(
+  "YOUR_SUPABASE_URL",
+  "YOUR_SUPABASE_KEY"
+);
+
+let selectedJob = null;
+
+/* LOAD JOB REQUESTS */
+async function loadRequests() {
+  const { data } = await supabaseClient
+    .from("jobs")
+    .select("*, technicians!requested_by(name)")
+    .eq("status", "requested")
+    .order("request_time", { ascending: false });
+
+  const tbody = document.querySelector("#requestTable tbody");
+  tbody.innerHTML = "";
+
+  data.forEach(job => {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${job.id}</td>
+      <td>${job.title}</td>
+      <td>${job.technicians?.name || "Unknown"}</td>
+      <td>${new Date(job.request_time).toLocaleString()}</td>
+      <td>
+        <button class="btn-approve" onclick='openAssignModal(${JSON.stringify(job)})'>Approve</button>
+        <button class="btn-reject" onclick='rejectJob(${job.id})'>Reject</button>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+/* OPEN ASSIGN MODAL */
+async function openAssignModal(job) {
+  selectedJob = job;
+
+  document.getElementById("modalJob").innerText = "Job ID: " + job.id;
+  document.getElementById("modalTech").innerText = "Requested By: " + (job.technicians?.name || "Unknown");
+
+  const { data: techs } = await supabaseClient
+    .from("technicians")
+    .select("*")
+    .eq("active", true);
+
+  const select = document.getElementById("assignTech");
+  select.innerHTML = "";
+
+  techs.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t.id;
+    opt.textContent = t.name;
+    select.appendChild(opt);
+  });
+
+  document.getElementById("assignModal").style.display = "flex";
+}
+
+/* CLOSE MODAL */
+function closeModal() {
+  document.getElementById("assignModal").style.display = "none";
+}
+
+/* CONFIRM ASSIGNMENT */
+async function confirmAssignment() {
+  const techId = document.getElementById("assignTech").value;
+  const notes = document.getElementById("assignNotes").value;
+
+  await supabaseClient
+    .from("jobs")
+    .update({
+      status: "assigned",
+      assigned_to: techId,
+      approval_time: new Date().toISOString(),
+      admin_notes: notes
+    })
+    .eq("id", selectedJob.id);
+
+  await supabaseClient.from("job_notifications").insert({
+    job_id: selectedJob.id,
+    tech_id: techId,
+    type: "assigned",
+    created_at: new Date().toISOString()
+  });
+
+  fetch("/api/notify-assignment", {
+    method: "POST",
+    body: JSON.stringify({
+      jobId: selectedJob.id,
+      techId,
+      notes
+    })
+  });
+
+  alert("Job assigned successfully.");
+  closeModal();
+  loadRequests();
+}
+
+/* REJECT JOB */
+async function rejectJob(jobId) {
+  await supabaseClient
+    .from("jobs")
+    .update({
+      status: "open",
+      requested_by: null,
+      request_time: null
+    })
+    .eq("id", jobId);
+
+  alert("Job request rejected.");
+  loadRequests();
+}
+
+/* REALTIME FEED */
+supabaseClient
+  .channel("job_request_feed")
+  .on("postgres_changes", { event: "UPDATE", schema: "public", table: "jobs" }, payload => {
+    if (payload.new.status === "requested") loadRequests();
+  })
+  .subscribe();
+
+loadRequests();
+</script>
+
+</body>
+</html>

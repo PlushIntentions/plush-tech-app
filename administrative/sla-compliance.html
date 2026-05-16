@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin SLA Compliance Dashboard</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: #0f0f0f;
+  color: white;
+  padding: 40px;
+}
+
+h1 {
+  font-size: 32px;
+  margin-bottom: 20px;
+}
+
+.glass {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 25px;
+  margin-bottom: 25px;
+  backdrop-filter: blur(12px);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.metric-card {
+  background: rgba(255,255,255,0.1);
+  padding: 20px;
+  border-radius: 16px;
+  text-align: center;
+  backdrop-filter: blur(10px);
+}
+
+.metric-value {
+  font-size: 32px;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+.metric-label {
+  opacity: 0.7;
+  font-size: 14px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+th, td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+}
+
+th {
+  text-align: left;
+  opacity: 0.7;
+}
+
+.sla-good { color: #4CAF50; }
+.sla-warn { color: #F5C15C; }
+.sla-bad { color: #ff4d4d; }
+</style>
+</head>
+
+<body>
+
+<h1>Admin SLA Compliance Dashboard</h1>
+
+<div class="glass">
+  <h2>Overall SLA Metrics</h2>
+
+  <div class="metric-grid">
+    <div class="metric-card">
+      <div class="metric-value" id="slaRate">--%</div>
+      <div class="metric-label">SLA Compliance Rate</div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-value" id="avgResponse">-- min</div>
+      <div class="metric-label">Avg Response Time</div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-value" id="avgResolution">-- min</div>
+      <div class="metric-label">Avg Resolution Time</div>
+    </div>
+
+    <div class="metric-card">
+      <div class="metric-value" id="breaches">--</div>
+      <div class="metric-label">SLA Breaches</div>
+    </div>
+  </div>
+</div>
+
+<div class="glass">
+  <h2>Technician SLA Performance</h2>
+  <table id="techTable">
+    <thead>
+      <tr>
+        <th>Technician</th>
+        <th>Jobs</th>
+        <th>On‑Time</th>
+        <th>Late</th>
+        <th>SLA %</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="glass">
+  <h2>Job‑Level SLA Breakdown</h2>
+  <table id="jobTable">
+    <thead>
+      <tr>
+        <th>Job ID</th>
+        <th>Technician</th>
+        <th>Scheduled</th>
+        <th>Check‑In</th>
+        <th>Minutes Late</th>
+        <th>SLA Status</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+const supabaseClient = supabase.createClient(
+  "YOUR_SUPABASE_URL",
+  "YOUR_SUPABASE_KEY"
+);
+
+let technicians = [];
+let jobs = [];
+
+/* LOAD TECHNICIANS */
+async function loadTechnicians() {
+  const { data } = await supabaseClient
+    .from("technicians")
+    .select("*");
+
+  technicians = data;
+}
+
+/* LOAD JOBS */
+async function loadJobs() {
+  const { data } = await supabaseClient
+    .from("jobs")
+    .select("*")
+    .eq("status", "completed");
+
+  jobs = data;
+  calculateMetrics();
+  renderTechTable();
+  renderJobTable();
+}
+
+/* CALCULATE METRICS */
+function calculateMetrics() {
+  const total = jobs.length;
+  const onTime = jobs.filter(j => (j.minutes_late || 0) === 0).length;
+  const breaches = jobs.filter(j => (j.minutes_late || 0) > 0).length;
+
+  const slaRate = total > 0 ? Math.round((onTime / total) * 100) : 0;
+
+  const avgResponse = Math.round(
+    jobs.reduce((sum, j) => sum + (j.response_time || 0), 0) / (total || 1)
+  );
+
+  const avgResolution = Math.round(
+    jobs.reduce((sum, j) => sum + (j.resolution_time || 0), 0) / (total || 1)
+  );
+
+  document.getElementById("slaRate").innerText = slaRate + "%";
+  document.getElementById("avgResponse").innerText = avgResponse + " min";
+  document.getElementById("avgResolution").innerText = avgResolution + " min";
+  document.getElementById("breaches").innerText = breaches;
+}
+
+/* TECH TABLE */
+function renderTechTable() {
+  const tbody = document.querySelector("#techTable tbody");
+  tbody.innerHTML = "";
+
+  technicians.forEach(t => {
+    const techJobs = jobs.filter(j => j.assigned_to === t.id);
+    const total = techJobs.length;
+    const onTime = techJobs.filter(j => (j.minutes_late || 0) === 0).length;
+    const late = total - onTime;
+    const sla = total > 0 ? Math.round((onTime / total) * 100) : 0;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${t.name}</td>
+      <td>${total}</td>
+      <td>${onTime}</td>
+      <td>${late}</td>
+      <td class="${sla >= 90 ? "sla-good" : sla >= 70 ? "sla-warn" : "sla-bad"}">${sla}%</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+/* JOB TABLE */
+function renderJobTable() {
+  const tbody = document.querySelector("#jobTable tbody");
+  tbody.innerHTML = "";
+
+  jobs.forEach(j => {
+    const tech = technicians.find(t => t.id === j.assigned_to);
+    const late = j.minutes_late || 0;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${j.id}</td>
+      <td>${tech ? tech.name : "Unknown"}</td>
+      <td>${new Date(j.scheduled_start).toLocaleString()}</td>
+      <td>${new Date(j.check_in_time).toLocaleString()}</td>
+      <td>${late}</td>
+      <td class="${late === 0 ? "sla-good" : "sla-bad"}">${late === 0 ? "On‑Time" : "Late"}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+/* REALTIME FEED */
+supabaseClient
+  .channel("sla_feed")
+  .on("postgres_changes", { event: "UPDATE", schema: "public", table: "jobs" }, payload => {
+    loadJobs();
+  })
+  .subscribe();
+
+loadTechnicians();
+loadJobs();
+</script>
+
+</body>
+</html>
