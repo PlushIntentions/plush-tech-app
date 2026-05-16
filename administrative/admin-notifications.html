@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin Notification Center</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: #0f0f0f;
+  color: white;
+  padding: 40px;
+}
+
+h1 {
+  font-size: 32px;
+  margin-bottom: 20px;
+}
+
+.glass {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 25px;
+  margin-bottom: 25px;
+  backdrop-filter: blur(12px);
+}
+
+.notification {
+  background: rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 12px;
+  border-left: 4px solid;
+}
+
+.unread {
+  border-left-color: #F5C15C;
+}
+
+.read {
+  border-left-color: rgba(255,255,255,0.3);
+  opacity: 0.6;
+}
+
+.category {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.message {
+  font-size: 16px;
+  margin-top: 5px;
+}
+
+.time {
+  font-size: 12px;
+  opacity: 0.5;
+  margin-top: 8px;
+}
+
+button {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  margin-top: 10px;
+}
+
+.btn-read {
+  background: #4CAF50;
+  color: white;
+}
+
+.btn-delete {
+  background: #ff4d4d;
+  color: white;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.filter-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  cursor: pointer;
+  border: none;
+}
+
+.filter-btn.active {
+  background: #F5C15C;
+  color: #0f0f0f;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Admin Notification Center</h1>
+
+<div class="glass">
+  <h2>Filters</h2>
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('all')">All</button>
+    <button class="filter-btn" onclick="setFilter('job_request')">Job Requests</button>
+    <button class="filter-btn" onclick="setFilter('assigned')">Assignments</button>
+    <button class="filter-btn" onclick="setFilter('penalty')">Penalties</button>
+    <button class="filter-btn" onclick="setFilter('scheduled')">Scheduling</button>
+    <button class="filter-btn" onclick="setFilter('override')">Overrides</button>
+    <button class="filter-btn" onclick="setFilter('system')">System Alerts</button>
+  </div>
+</div>
+
+<div class="glass">
+  <h2>Notifications</h2>
+  <div id="notificationList"></div>
+</div>
+
+<script>
+const supabaseClient = supabase.createClient(
+  "YOUR_SUPABASE_URL",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzbmV1Z2R3b3hwaWJhamdod2dlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNjk2NjUsImV4cCI6MjA5Mzg0NTY2NX0.wmZDgY_fAfeiDlZzWLA4KT5_dlbyG7Ns1W4z_HZH8Ws"
+);
+
+let notifications = [];
+let currentFilter = "all";
+
+/* LOAD NOTIFICATIONS */
+async function loadNotifications() {
+  const { data } = await supabaseClient
+    .from("admin_notifications")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  notifications = data;
+  renderNotifications();
+}
+
+/* RENDER NOTIFICATIONS */
+function renderNotifications() {
+  const container = document.getElementById("notificationList");
+  container.innerHTML = "";
+
+  notifications
+    .filter(n => currentFilter === "all" || n.type === currentFilter)
+    .forEach(n => {
+      const div = document.createElement("div");
+      div.className = "notification " + (n.read ? "read" : "unread");
+
+      div.innerHTML = `
+        <div class="category">${n.type.toUpperCase()}</div>
+        <div class="message">${n.message}</div>
+        <div class="time">${new Date(n.created_at).toLocaleString()}</div>
+
+        <button class="btn-read" onclick="markRead(${n.id})">Mark Read</button>
+        <button class="btn-delete" onclick="deleteNotification(${n.id})">Delete</button>
+      `;
+
+      container.appendChild(div);
+    });
+}
+
+/* FILTER */
+function setFilter(type) {
+  currentFilter = type;
+
+  document.querySelectorAll(".filter-btn").forEach(btn => btn.classList.remove("active"));
+  [...document.querySelectorAll(".filter-btn")].find(btn => btn.innerText.toLowerCase().includes(type)).classList.add("active");
+
+  renderNotifications();
+}
+
+/* MARK READ */
+async function markRead(id) {
+  await supabaseClient
+    .from("admin_notifications")
+    .update({ read: true })
+    .eq("id", id);
+
+  loadNotifications();
+}
+
+/* DELETE */
+async function deleteNotification(id) {
+  await supabaseClient
+    .from("admin_notifications")
+    .delete()
+    .eq("id", id);
+
+  loadNotifications();
+}
+
+/* REALTIME FEED */
+supabaseClient
+  .channel("admin_notification_feed")
+  .on("postgres_changes", { event: "INSERT", schema: "public", table: "admin_notifications" }, payload => {
+    loadNotifications();
+  })
+  .subscribe();
+
+loadNotifications();
+</script>
+
+</body>
+</html>

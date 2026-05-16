@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin Billing & Payroll Dashboard</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: #0f0f0f;
+  color: white;
+  padding: 40px;
+}
+
+h1 {
+  font-size: 32px;
+  margin-bottom: 20px;
+}
+
+.glass {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 25px;
+  margin-bottom: 25px;
+  backdrop-filter: blur(12px);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+th, td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+}
+
+th {
+  text-align: left;
+  opacity: 0.7;
+}
+
+button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-adjust {
+  background: #F5C15C;
+  color: #0f0f0f;
+}
+
+.btn-view {
+  background: rgba(255,255,255,0.2);
+  color: white;
+}
+
+.modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background: rgba(255,255,255,0.1);
+  padding: 30px;
+  border-radius: 16px;
+  width: 450px;
+  backdrop-filter: blur(15px);
+}
+
+input, textarea, select {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255,255,255,0.15);
+  color: white;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Admin Billing & Payroll Dashboard</h1>
+
+<div class="glass">
+  <h2>Technician Payroll Summary</h2>
+  <table id="payrollTable">
+    <thead>
+      <tr>
+        <th>Technician</th>
+        <th>Total Jobs</th>
+        <th>Gross Pay</th>
+        <th>Penalties</th>
+        <th>Bonuses</th>
+        <th>Net Pay</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- MODAL -->
+<div class="modal" id="payrollModal">
+  <div class="modal-content">
+    <h2>Payroll Details</h2>
+
+    <p id="modalTech"></p>
+    <p id="modalGross"></p>
+    <p id="modalPenalty"></p>
+    <p id="modalBonus"></p>
+    <p id="modalNet"></p>
+
+    <label>Adjustment Type</label>
+    <select id="adjustType">
+      <option value="bonus">Bonus</option>
+      <option value="deduction">Deduction</option>
+    </select>
+
+    <label>Amount</label>
+    <input id="adjustAmount" type="number" placeholder="Enter amount">
+
+    <label>Reason</label>
+    <textarea id="adjustReason" placeholder="Explain adjustment..."></textarea>
+
+    <button class="btn-adjust" onclick="applyAdjustment()">Apply Adjustment</button>
+    <button class="btn-view" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script>
+const supabaseClient = supabase.createClient(
+  "YOUR_SUPABASE_URL",
+  "YOUR_SUPABASE_KEY"
+);
+
+let technicians = [];
+let jobs = [];
+let selectedTech = null;
+
+/* LOAD TECHNICIANS */
+async function loadTechnicians() {
+  const { data } = await supabaseClient
+    .from("technicians")
+    .select("*")
+    .eq("active", true);
+
+  technicians = data;
+}
+
+/* LOAD JOBS */
+async function loadJobs() {
+  const { data } = await supabaseClient
+    .from("jobs")
+    .select("*")
+    .eq("status", "completed");
+
+  jobs = data;
+  renderPayroll();
+}
+
+/* RENDER PAYROLL TABLE */
+function renderPayroll() {
+  const tbody = document.querySelector("#payrollTable tbody");
+  tbody.innerHTML = "";
+
+  technicians.forEach(tech => {
+    const techJobs = jobs.filter(j => j.assigned_to === tech.id);
+
+    const gross = techJobs.reduce((sum, j) => sum + (j.payout_amount || 0), 0);
+    const penalties = techJobs.reduce((sum, j) => sum + (j.penalty_amount || 0), 0);
+    const bonuses = techJobs.reduce((sum, j) => sum + (j.bonus_amount || 0), 0);
+
+    const net = gross - penalties + bonuses;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${tech.name}</td>
+      <td>${techJobs.length}</td>
+      <td>$${gross.toFixed(2)}</td>
+      <td>$${penalties.toFixed(2)}</td>
+      <td>$${bonuses.toFixed(2)}</td>
+      <td>$${net.toFixed(2)}</td>
+      <td><button class="btn-view" onclick='openPayrollModal(${JSON.stringify({
+        techId: tech.id,
+        name: tech.name,
+        gross,
+        penalties,
+        bonuses,
+        net
+      })})'>View</button></td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+/* OPEN MODAL */
+function openPayrollModal(data) {
+  selectedTech = data;
+
+  document.getElementById("modalTech").innerText = "Technician: " + data.name;
+  document.getElementById("modalGross").innerText = "Gross Pay: $" + data.gross.toFixed(2);
+  document.getElementById("modalPenalty").innerText = "Penalties: $" + data.penalties.toFixed(2);
+  document.getElementById("modalBonus").innerText = "Bonuses: $" + data.bonuses.toFixed(2);
+  document.getElementById("modalNet").innerText = "Net Pay: $" + data.net.toFixed(2);
+
+  document.getElementById("payrollModal").style.display = "flex";
+}
+
+/* CLOSE MODAL */
+function closeModal() {
+  document.getElementById("payrollModal").style.display = "none";
+}
+
+/* APPLY ADJUSTMENT */
+async function applyAdjustment() {
+  const type = document.getElementById("adjustType").value;
+  const amount = Number(document.getElementById("adjustAmount").value);
+  const reason = document.getElementById("adjustReason").value;
+
+  if (!amount || !reason) {
+    alert("Amount and reason are required.");
+    return;
+  }
+
+  await supabaseClient.from("payroll_adjustments").insert({
+    tech_id: selectedTech.techId,
+    type,
+    amount,
+    reason,
+    timestamp: new Date().toISOString()
+  });
+
+  alert("Adjustment applied.");
+  closeModal();
+  loadJobs();
+}
+
+/* REALTIME FEED */
+supabaseClient
+  .channel("payroll_feed")
+  .on("postgres_changes", { event: "UPDATE", schema: "public", table: "jobs" }, payload => {
+    loadJobs();
+  })
+  .subscribe();
+
+loadTechnicians();
+loadJobs();
+</script>
+
+</body>
+</html>

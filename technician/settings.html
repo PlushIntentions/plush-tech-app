@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Technician Settings</title>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, sans-serif;
+      background: url('/bg/dashboard-blur.jpg') center/cover no-repeat fixed;
+      color: white;
+      display: flex;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      width: 100%;
+      height: 100vh;
+      backdrop-filter: blur(12px);
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 90px;
+      background: rgba(255,255,255,0.08);
+      border-right: 1px solid rgba(255,255,255,0.15);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 25px;
+      gap: 25px;
+      backdrop-filter: blur(20px);
+    }
+
+    .sidebar-icon {
+      width: 38px;
+      cursor: pointer;
+      transition: 0.3s ease;
+      animation: pulseGlow 3s infinite ease-in-out;
+    }
+
+    /* Wave timing */
+    .sidebar-icon:nth-child(1) { animation-delay: 0s; }
+    .sidebar-icon:nth-child(2) { animation-delay: 0.2s; }
+    .sidebar-icon:nth-child(3) { animation-delay: 0.4s; }
+    .sidebar-icon:nth-child(4) { animation-delay: 0.6s; }
+    .sidebar-icon:nth-child(5) { animation-delay: 0.8s; }
+    .sidebar-icon:nth-child(6) { animation-delay: 1s; }
+    .sidebar-icon:nth-child(7) { animation-delay: 1.2s; }
+    .sidebar-icon:nth-child(8) { animation-delay: 1.4s; }
+
+    @keyframes pulseGlow {
+      0% {
+        filter: drop-shadow(0 0 6px rgba(255,255,255,0.4))
+                drop-shadow(0 0 12px rgba(255,180,160,0.3));
+        transform: scale(1);
+      }
+      50% {
+        filter: drop-shadow(0 0 12px rgba(255,255,255,0.7))
+                drop-shadow(0 0 25px rgba(255,180,160,0.5));
+        transform: scale(1.08);
+      }
+      100% {
+        filter: drop-shadow(0 0 6px rgba(255,255,255,0.4))
+                drop-shadow(0 0 12px rgba(255,180,160,0.3));
+        transform: scale(1);
+      }
+    }
+
+    /* MAIN CONTENT */
+    .content {
+      flex: 1;
+      padding: 40px;
+      overflow-y: auto;
+    }
+
+    .glass-card {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 18px;
+      padding: 30px;
+      backdrop-filter: blur(15px);
+      margin-bottom: 25px;
+      box-shadow: 0 0 25px rgba(255,255,255,0.08);
+    }
+
+    label {
+      display: block;
+      margin-top: 20px;
+      margin-bottom: 6px;
+      color: #E8A7C8;
+      font-size: 14px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255,255,255,0.12);
+      color: white;
+      font-size: 14px;
+      backdrop-filter: blur(10px);
+    }
+
+    button {
+      margin-top: 30px;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(90deg, #E8A7C8, #F5C15C);
+      color: #0F0F0F;
+      font-weight: bold;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    @media(max-width:900px){
+      .sidebar { width: 70px; }
+      .content { padding: 20px; }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <img src="/icons/home.png" class="sidebar-icon">
+    <img src="/icons/dashboard.png" class="sidebar-icon">
+    <img src="/icons/technician.png" class="sidebar-icon">
+    <img src="/icons/clients.png" class="sidebar-icon">
+    <img src="/icons/jobs.png" class="sidebar-icon">
+    <img src="/icons/billing.png" class="sidebar-icon">
+    <img src="/icons/settings.png" class="sidebar-icon">
+    <img src="/icons/logout.png" class="sidebar-icon">
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <div class="glass-card">
+      <h1 style="font-family:'Playfair Display', serif;">Settings</h1>
+      <p style="opacity:0.7;">Manage your account preferences</p>
+    </div>
+
+    <div class="glass-card">
+      <form id="settingsForm">
+
+        <label>Email Notifications</label>
+        <select id="email_notifications">
+          <option value="enabled">Enabled</option>
+          <option value="disabled">Disabled</option>
+        </select>
+
+        <label>SMS Alerts</label>
+        <select id="sms_alerts">
+          <option value="enabled">Enabled</option>
+          <option value="disabled">Disabled</option>
+        </select>
+
+        <label>Dark Mode</label>
+        <select id="dark_mode">
+          <option value="enabled">Enabled</option>
+          <option value="disabled">Disabled</option>
+        </select>
+
+        <label>Change Password</label>
+        <input id="new_password" type="password" placeholder="Enter new password">
+
+        <button type="submit">Save Settings</button>
+
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const supabaseClient = supabase.createClient(
+    "YOUR_URL",
+    "YOUR_KEY"
+  );
+
+  async function loadSettings() {
+    const techId = localStorage.getItem("tech_id");
+
+    const { data, error } = await supabaseClient
+      .from("technician_settings")
+      .select("*")
+      .eq("tech_id", techId)
+      .single();
+
+    if (error) return console.error(error);
+
+    document.getElementById("email_notifications").value = data.email_notifications;
+    document.getElementById("sms_alerts").value = data.sms_alerts;
+    document.getElementById("dark_mode").value = data.dark_mode;
+  }
+
+  document.getElementById("settingsForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const techId = localStorage.getItem("tech_id");
+
+    const emailNotifications = document.getElementById("email_notifications").value;
+    const smsAlerts = document.getElementById("sms_alerts").value;
+    const darkMode = document.getElementById("dark_mode").value;
+    const newPassword = document.getElementById("new_password").value;
+
+    const { error } = await supabaseClient
+      .from("technician_settings")
+      .update({
+        email_notifications: emailNotifications,
+        sms_alerts: smsAlerts,
+        dark_mode: darkMode
+      })
+      .eq("tech_id", techId);
+
+    if (error) {
+      alert("Something went wrong saving your settings.");
+      return;
+    }
+
+    if (newPassword.trim() !== "") {
+      await supabaseClient.auth.updateUser({ password: newPassword });
+    }
+
+    alert("Settings updated successfully.");
+  });
+
+  loadSettings();
+</script>
+
+</body>
+</html>
